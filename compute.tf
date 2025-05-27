@@ -11,8 +11,8 @@ locals {
     cloudwatch_log_group_name = var.cloudwatch_log_group_name == null ? "" : var.cloudwatch_log_group_name
   }
   fluent_bit_cloudwatch_config = (var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "cloudwatch" ?
-    (templatefile("${path.module}/templates/fluent-bit-cloudwatch.conf.tpl", local.fluent_bit_cloudwatch_args))
-    : ""
+  (templatefile("${path.module}/templates/fluent-bit-cloudwatch.conf.tpl", local.fluent_bit_cloudwatch_args))
+  : ""
   )
 
   // S3 destination
@@ -21,18 +21,20 @@ locals {
     s3_log_fwd_bucket_name = var.s3_log_fwd_bucket_name == null ? "" : var.s3_log_fwd_bucket_name
   }
   fluent_bit_s3_config = (var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "s3" ?
-    (templatefile("${path.module}/templates/fluent-bit-s3.conf.tpl", local.fluent_bit_s3_args))
-    : ""
+  (templatefile("${path.module}/templates/fluent-bit-s3.conf.tpl", local.fluent_bit_s3_args))
+  : ""
   )
 
   // Custom destination
   fluent_bit_custom_config = (var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "custom" ?
-    var.custom_fluent_bit_config
-    : ""
+  var.custom_fluent_bit_config
+  : ""
   )
 
   // Final rendered config
-  fluent_bit_rendered_config = join("", [local.fluent_bit_cloudwatch_config, local.fluent_bit_s3_config, local.fluent_bit_custom_config])
+  fluent_bit_rendered_config = join("", [
+    local.fluent_bit_cloudwatch_config, local.fluent_bit_s3_config, local.fluent_bit_custom_config
+  ])
 }
 
 #------------------------------------------------------------------------------
@@ -126,7 +128,12 @@ locals {
 }
 
 locals {
-  user_data_template_rendered = templatefile("${path.module}/templates/tfe_user_data.sh.tpl", local.user_data_args)
+  user_data_template_rendered = templatefile("${path.module}/templates/${var.user_data_template_name}", local.user_data_args)
+}
+
+resource "local_file" "user_data" {
+  filename = "./tmp/user_data_rendered.sh"
+  content  = local.user_data_template_rendered
 }
 
 #------------------------------------------------------------------------------

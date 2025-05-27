@@ -2,6 +2,14 @@
 # SPDX-License-Identifier: MPL-2.0
 
 #------------------------------------------------------------------------------
+# Provider
+#------------------------------------------------------------------------------
+variable "region" {
+  type        = string
+  description = "AWS region where TFE will be deployed."
+}
+
+#------------------------------------------------------------------------------
 # Common
 #------------------------------------------------------------------------------
 variable "friendly_name_prefix" {
@@ -20,38 +28,39 @@ variable "common_tags" {
   default     = {}
 }
 
+variable "tfe_encryption_password_secret" {
+  type = string
+  default = "Password for internal Vault"
+}
+
 variable "is_secondary_region" {
   type        = bool
   description = "Boolean indicating whether this TFE deployment is in the primary or secondary (replica) region."
   default     = false
 }
 
-#------------------------------------------------------------------------------
-# Bootstrap
-#------------------------------------------------------------------------------
-variable "tfe_license_secret_arn" {
+variable "vpc_cidr" {
+  description = "The CIDR block for the VPC."
   type        = string
-  description = "ARN of AWS Secrets Manager secret for TFE license file. Secret type should be plaintext."
+  default     = "10.0.0.0/16"
 }
 
-variable "tfe_tls_cert_secret_arn" {
-  type        = string
-  description = "ARN of AWS Secrets Manager secret for TFE TLS certificate in PEM format. Secret must be stored as a base64-encoded string. Secret type should be plaintext."
+variable "public_subnet_cidrs" {
+  description = "List of CIDR blocks for the public subnets."
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
 }
 
-variable "tfe_tls_privkey_secret_arn" {
-  type        = string
-  description = "ARN of AWS Secrets Manager secret for TFE TLS private key in PEM format. Secret must be stored as a base64-encoded string. Secret type should be plaintext."
+variable "private_subnet_cidrs" {
+  description = "List of CIDR blocks for the private subnets."
+  type        = list(string)
+  default     = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 }
 
-variable "tfe_tls_ca_bundle_secret_arn" {
-  type        = string
-  description = "ARN of AWS Secrets Manager secret for private/custom TLS Certificate Authority (CA) bundle in PEM format. Secret must be stored as a base64-encoded string. Secret type should be plaintext."
-}
-
-variable "tfe_encryption_password_secret_arn" {
-  type        = string
-  description = "ARN of AWS Secrets Manager secret for TFE encryption password. Secret type should be plaintext."
+variable "availability_zones" {
+  description = "List of availability zones to use for the subnets."
+  type        = list(string)
+  default     = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
 }
 
 variable "tfe_image_repository_url" {
@@ -194,37 +203,6 @@ variable "tfe_run_pipeline_docker_network" {
 #------------------------------------------------------------------------------
 # Networking
 #------------------------------------------------------------------------------
-variable "vpc_id" {
-  type        = string
-  description = "ID of VPC where TFE will be deployed."
-}
-
-variable "lb_subnet_ids" {
-  type        = list(string)
-  description = "List of subnet IDs to use for the load balancer. If `lb_is_internal` is `false`, then these should be public subnets. Otherwise, these should be private subnets."
-}
-
-variable "ec2_subnet_ids" {
-  type        = list(string)
-  description = "List of subnet IDs to use for the EC2 instance. Private subnets is the best practice here."
-}
-
-variable "rds_subnet_ids" {
-  type        = list(string)
-  description = "List of subnet IDs to use for RDS database subnet group. Private subnets is the best practice here."
-}
-
-variable "redis_subnet_ids" {
-  type        = list(string)
-  description = "List of subnet IDs to use for Redis cluster subnet group. Private subnets is the best practice here."
-  default     = []
-
-  validation {
-    condition     = var.tfe_operational_mode == "active-active" ? length(var.redis_subnet_ids) > 0 : true
-    error_message = "Value must be set when `tfe_operational_mode` is `active-active`."
-  }
-}
-
 variable "lb_type" {
   type        = string
   description = "Indicates which type of AWS load balancer is created: Application Load Balancer (`alb`) or Network Load Balancer (`nlb`)."
@@ -335,12 +313,6 @@ variable "route53_tfe_hosted_zone_is_private" {
 #------------------------------------------------------------------------------
 # Compute
 #------------------------------------------------------------------------------
-variable "user_data_template_name" {
-  type        = string
-  description = "Name of user data script template"
-  default     = "tfe_user_data.sh.tpl"
-}
-
 variable "ec2_os_distro" {
   type        = string
   description = "Linux OS distribution type for TFE EC2 instance. Choose from `al2023`, `ubuntu`, `rhel`, `centos`."
@@ -495,10 +467,10 @@ variable "ebs_iops" {
 #------------------------------------------------------------------------------
 # RDS Aurora PostgreSQL
 #------------------------------------------------------------------------------
-variable "tfe_database_password_secret_arn" {
-  type        = string
-  description = "ARN of AWS Secrets Manager secret for the TFE database password used to create RDS Aurora (PostgreSQL) database cluster. Secret type should be plaintext. Value of secret must be from 8 to 128 alphanumeric characters or symbols (excluding `@`, `\"`, and `/`)."
-}
+#variable "tfe_database_password_secret_arn" {
+#  type        = string
+#  description = "ARN of AWS Secrets Manager secret for the TFE database password used to create RDS Aurora (PostgreSQL) database cluster. Secret type should be plaintext. Value of secret must be from 8 to 128 alphanumeric characters or symbols (excluding `@`, `\"`, and `/`)."
+#}
 
 variable "tfe_database_name" {
   type        = string
@@ -801,27 +773,27 @@ variable "redis_node_type" {
   default     = "cache.m5.large"
 }
 
-variable "redis_multi_az_enabled" {
-  type        = bool
-  description = "Boolean to create Redis nodes across multiple availability zones. If `true`, `redis_automatic_failover_enabled` must also be `true`, and more than one subnet must be specified within `redis_subnet_ids`."
-  default     = true
-
-  validation {
-    condition     = var.redis_multi_az_enabled ? var.redis_automatic_failover_enabled == true && length(var.redis_subnet_ids) > 1 : true
-    error_message = "If `true`, `redis_automatic_failover_enabled` must also be `true`, and more than one subnet must be specified within `redis_subnet_ids`."
-  }
-}
-
-variable "redis_automatic_failover_enabled" {
-  type        = bool
-  description = "Boolean for deploying Redis nodes in multiple availability zones and enabling automatic failover."
-  default     = true
-
-  validation {
-    condition     = var.redis_automatic_failover_enabled ? length(var.redis_subnet_ids) > 1 : true
-    error_message = "If `true`, you must specify more than one subnet within `redis_subnet_ids`."
-  }
-}
+#variable "redis_multi_az_enabled" {
+#  type        = bool
+#  description = "Boolean to create Redis nodes across multiple availability zones. If `true`, `redis_automatic_failover_enabled` must also be `true`, and more than one subnet must be specified within `redis_subnet_ids`."
+#  default     = true
+#
+#  validation {
+#    condition     = var.redis_multi_az_enabled ? var.redis_automatic_failover_enabled == true && length(var.redis_subnet_ids) > 1 : true
+#    error_message = "If `true`, `redis_automatic_failover_enabled` must also be `true`, and more than one subnet must be specified within `redis_subnet_ids`."
+#  }
+#}
+#
+#variable "redis_automatic_failover_enabled" {
+#  type        = bool
+#  description = "Boolean for deploying Redis nodes in multiple availability zones and enabling automatic failover."
+#  default     = true
+#
+#  validation {
+#    condition     = var.redis_automatic_failover_enabled ? length(var.redis_subnet_ids) > 1 : true
+#    error_message = "If `true`, you must specify more than one subnet within `redis_subnet_ids`."
+#  }
+#}
 
 variable "redis_at_rest_encryption_enabled" {
   type        = bool

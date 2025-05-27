@@ -77,7 +77,7 @@ resource "tls_locally_signed_cert" "cluster_signed_cert" {
   // CA certificate
   ca_cert_pem        = tls_self_signed_cert.ca_cert.cert_pem
 
-  validity_period_hours = 43800
+  validity_period_hours = 4380
 
   allowed_uses = [
     "digital_signature",
@@ -90,4 +90,9 @@ resource "tls_locally_signed_cert" "cluster_signed_cert" {
 resource "local_file" "cluster_cert" {
   content  = tls_locally_signed_cert.cluster_signed_cert.cert_pem
   filename = "${path.module}/tmp/cluster.cert"
+}
+
+resource "aws_acm_certificate" "alb_cert" {
+  private_key      = tls_private_key.cluster_private_key.private_key_pem
+  certificate_body = tls_locally_signed_cert.cluster_signed_cert.cert_pem
 }
